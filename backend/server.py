@@ -313,7 +313,12 @@ async def checkout_status(session_id: str, request: Request):
     host_url = str(request.base_url)
     webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
     stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
-    status: CheckoutStatusResponse = await stripe_checkout.get_checkout_status(session_id)
+    try:
+        status: CheckoutStatusResponse = await stripe_checkout.get_checkout_status(session_id)
+    except Exception as e:
+        logger.info(f"checkout_status: invalid session_id={session_id!r}: {e}")
+        return {"status": "not_found", "payment_status": "unknown",
+                "amount_total": None, "currency": None, "metadata": {}}
 
     # Idempotent update
     existing = await db.payment_transactions.find_one({"session_id": session_id})
