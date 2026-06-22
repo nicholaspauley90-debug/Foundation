@@ -1,26 +1,11 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Plus, Minus } from "lucide-react";
 import { useCart } from "../context/CartContext";
-import { createCheckout } from "../lib/api";
 
 export default function Cart() {
   const { items, removeItem, updateQty, subtotal } = useCart();
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function handleCheckout() {
-    if (!items.length) return;
-    setLoading(true); setErr("");
-    try {
-      const payload = items.map((i) => ({
-        product_id: i.product_id, variant_id: i.variant_id,
-        title: i.title, variant_title: i.variant_title, image: i.image, quantity: i.quantity,
-      }));
-      const { url } = await createCheckout(payload, window.location.origin);
-      window.location.href = url;
-    } catch (e) { setErr(e?.response?.data?.detail || "Checkout failed"); setLoading(false); }
-  }
+  const nav = useNavigate();
 
   return (
     <div data-testid="cart-page" className="max-w-[1200px] mx-auto px-6 md:px-10 py-14 md:py-20">
@@ -40,7 +25,7 @@ export default function Cart() {
                 <div className="flex-1">
                   <div className="serif text-lg leading-tight">{it.title}</div>
                   {it.variant_title && <div className="eyebrow text-stone-950/50 mt-2">{it.variant_title}</div>}
-                  <div className="font-mono text-sm mt-3">${(it.unit_price).toFixed(2)} ea</div>
+                  <div className="font-mono text-sm mt-3">${it.unit_price.toFixed(2)} ea</div>
                   <div className="mt-4 flex items-center gap-3">
                     <button onClick={() => updateQty(it.product_id, it.variant_id, it.quantity - 1)} className="border border-stone-950/20 w-7 h-7 flex items-center justify-center hover:bg-stone-950 hover:text-cream-50"><Minus size={12} /></button>
                     <span className="font-mono w-6 text-center text-xs">{it.quantity}</span>
@@ -62,9 +47,8 @@ export default function Cart() {
               <div className="flex justify-between font-mono text-sm"><span className="text-stone-950/60">Shipping</span><span>$6.99</span></div>
               <div className="divider-thin" />
               <div className="flex justify-between items-baseline"><span className="serif text-xl">Total</span><span className="serif text-xl">${(subtotal + 6.99).toFixed(2)}</span></div>
-              {err && <div className="text-red-700 text-[12px] font-mono">{err}</div>}
-              <button data-testid="cart-checkout-btn" disabled={loading} onClick={handleCheckout} className="btn-primary w-full disabled:opacity-50">
-                {loading ? "Redirecting…" : <>Checkout <ArrowRight size={14} /></>}
+              <button data-testid="cart-checkout-btn" onClick={() => nav("/checkout")} className="btn-primary w-full">
+                Checkout <ArrowRight size={14} />
               </button>
               <div className="eyebrow text-stone-950/50 text-center pt-2">SECURE · STRIPE</div>
             </div>

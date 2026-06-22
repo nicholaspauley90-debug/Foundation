@@ -6,25 +6,50 @@ export const API = `${BACKEND}/api`;
 export const apiClient = axios.create({
   baseURL: API,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true,
 });
 
-export async function listProducts() {
-  const { data } = await apiClient.get("/products");
-  return data;
+// Attach bearer token from localStorage as fallback
+apiClient.interceptors.request.use((config) => {
+  const t = localStorage.getItem("foundation_token");
+  if (t) config.headers.Authorization = `Bearer ${t}`;
+  return config;
+});
+
+export function formatApiErrorDetail(detail) {
+  if (detail == null) return "Something went wrong. Please try again.";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail))
+    return detail.map((e) => (e && typeof e.msg === "string" ? e.msg : JSON.stringify(e))).filter(Boolean).join(" ");
+  if (detail && typeof detail.msg === "string") return detail.msg;
+  return String(detail);
 }
-export async function getProduct(id) {
-  const { data } = await apiClient.get(`/products/${id}`);
-  return data;
-}
-export async function createCheckout(items, originUrl, email) {
-  const { data } = await apiClient.post("/checkout/session", { items, origin_url: originUrl, email });
-  return data;
-}
-export async function checkoutStatus(sessionId) {
-  const { data } = await apiClient.get(`/checkout/status/${sessionId}`);
-  return data;
-}
-export async function subscribeEmail(email, source = "skin_labs") {
-  const { data } = await apiClient.post("/newsletter", { email, source });
-  return data;
-}
+
+// Products
+export const listProducts = () => apiClient.get("/products").then((r) => r.data);
+export const getProduct = (id) => apiClient.get(`/products/${id}`).then((r) => r.data);
+
+// Reviews
+export const getReviews = (id) => apiClient.get(`/products/${id}/reviews`).then((r) => r.data);
+export const postReview = (id, payload) => apiClient.post(`/products/${id}/reviews`, payload).then((r) => r.data);
+
+// Checkout
+export const createCheckout = (items, originUrl, email, shipping_address) =>
+  apiClient.post("/checkout/session", { items, origin_url: originUrl, email, shipping_address }).then((r) => r.data);
+export const checkoutStatus = (sid) => apiClient.get(`/checkout/status/${sid}`).then((r) => r.data);
+
+// Newsletter
+export const subscribeEmail = (email, source = "skin_labs") =>
+  apiClient.post("/newsletter", { email, source }).then((r) => r.data);
+
+// Cart tracking (abandoned cart)
+export const trackCart = (email, items) => apiClient.post("/cart/track", { email, items }).then((r) => r.data);
+
+// Auth
+export const register = (payload) => apiClient.post("/auth/register", payload).then((r) => r.data);
+export const login = (payload) => apiClient.post("/auth/login", payload).then((r) => r.data);
+export const logout = () => apiClient.post("/auth/logout").then((r) => r.data);
+export const me = () => apiClient.get("/auth/me").then((r) => r.data);
+
+// Account
+export const myOrders = () => apiClient.get("/account/orders").then((r) => r.data);

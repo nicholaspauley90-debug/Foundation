@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { ShoppingBag, Menu, X, Search } from "lucide-react";
+import { ShoppingBag, Menu, X, Search, User } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
 import BrandMark from "./BrandMark";
 
 const NAV = [
@@ -12,6 +13,7 @@ const NAV = [
 
 export default function Header() {
   const { count, setOpen } = useCart();
+  const { user } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
@@ -61,6 +63,9 @@ export default function Header() {
           <button data-testid="search-btn" className="hidden md:block opacity-70 hover:opacity-100 transition" aria-label="Search">
             <Search size={18} strokeWidth={1.4} />
           </button>
+          <NavLink to={user ? "/account" : "/login"} data-testid="account-link" className="opacity-70 hover:opacity-100 transition" aria-label={user ? "Account" : "Sign in"}>
+            <User size={19} strokeWidth={1.4} />
+          </NavLink>
           <button
             data-testid="open-cart-btn"
             onClick={() => setOpen(true)}

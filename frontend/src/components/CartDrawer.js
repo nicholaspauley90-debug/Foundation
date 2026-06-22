@@ -1,35 +1,16 @@
-import React, { useState } from "react";
+import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { X, Plus, Minus, ArrowRight } from "lucide-react";
 import { useCart } from "../context/CartContext";
-import { createCheckout } from "../lib/api";
 
 export default function CartDrawer() {
   const { items, removeItem, updateQty, subtotal, open, setOpen } = useCart();
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
   const navigate = useNavigate();
 
   async function handleCheckout() {
     if (!items.length) return;
-    setErr("");
-    setLoading(true);
-    try {
-      const origin = window.location.origin;
-      const payload = items.map((i) => ({
-        product_id: i.product_id,
-        variant_id: i.variant_id,
-        title: i.title,
-        variant_title: i.variant_title,
-        image: i.image,
-        quantity: i.quantity,
-      }));
-      const { url } = await createCheckout(payload, origin);
-      window.location.href = url;
-    } catch (e) {
-      setErr(e?.response?.data?.detail || "Checkout failed. Please try again.");
-      setLoading(false);
-    }
+    setOpen(false);
+    navigate("/checkout");
   }
 
   return (
@@ -88,9 +69,8 @@ export default function CartDrawer() {
             <div className="flex justify-between font-mono text-[13px]"><span className="text-stone-950/60">Shipping</span><span>$6.99</span></div>
             <div className="divider-thin" />
             <div className="flex justify-between"><span className="serif text-lg">Total</span><span className="serif text-lg">${(subtotal + 6.99).toFixed(2)}</span></div>
-            {err && <div data-testid="cart-error" className="text-red-700 text-[12px] font-mono">{err}</div>}
-            <button data-testid="checkout-btn" disabled={loading} onClick={handleCheckout} className="btn-primary w-full disabled:opacity-50">
-              {loading ? "Redirecting…" : <>Checkout <ArrowRight size={14} /></>}
+            <button data-testid="checkout-btn" onClick={handleCheckout} className="btn-primary w-full">
+              Checkout <ArrowRight size={14} />
             </button>
             <button onClick={() => { setOpen(false); navigate("/cart"); }} className="block w-full text-center eyebrow opacity-60 hover:opacity-100">View Full Cart</button>
           </div>

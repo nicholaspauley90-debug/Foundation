@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ShoppingBag, Leaf } from "lucide-react";
 import { getProduct } from "../lib/api";
 import { useCart } from "../context/CartContext";
+import Reviews from "../components/Reviews";
 
 function getOptionMap(product) {
   const map = {};
@@ -194,6 +195,8 @@ export default function ProductDetail() {
         <Link to="/shop" className="link-u eyebrow"><ArrowLeft size={12} className="inline mr-2" /> All Products</Link>
         <Link to="/skin-labs" className="link-u eyebrow">Skin Labs <ArrowRight size={12} className="inline ml-2" /></Link>
       </div>
+
+      <Reviews productId={product.id} />
     </div>
   );
 }
