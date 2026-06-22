@@ -1,75 +1,99 @@
 # Foundation Apparel & Skin Labs — PRD
 
 ## Original Problem Statement
-> "I want you to finish the website I started on Github. And I would like Github to Host my website. Give me a Full working website using what I had started there. I have included my API's in there as well for my drop shipping sites im using to fund my website. I do not have product yet for the Skin Labs portion of my website, so leave that as a Drop for later additions. However I have added my API for my apparel side of the site."
+> "I want you to finish the website I started on Github... Skin Labs portion as a drop for later additions. I have added my API for my apparel side of the site."
 
-User wanted a more premium "wow" alternative to their existing Shopify store (`shopfoundationlabs.myshopify.com`). The placeholder GitHub repo (`nicholaspauley90-debug/desktop-tutorial`) was a default GitHub-Desktop tutorial repo; built from scratch using Shopify store as design reference.
+Replacing user's Shopify store with a premium, fully custom e-commerce experience.
 
 ## User Choices
-- Build fresh (option 2) — premium minimalist e-commerce site
-- Printify as drop-ship API (token + shop_id 27896224 supplied)
-- Stripe Checkout for payments (test keys supplied)
-- Brand vibe: **Earthy minimal** — cream / sage green / black / grey / dark grey, fits the "leaf logo" brand
-- Skin Labs section = "Coming Soon" (no products yet)
-- User provided AI-influencer image assets used for hero/atelier shots
+- Build fresh (Shopify store as reference)
+- Printify drop-shipping API (token + shop_id 27896224)
+- Stripe Checkout (test mode keys supplied)
+- Earthy minimal aesthetic — cream / sage / black / grey
+- **Customer accounts**: JWT email+password (no third-party login)
+- **Auto-fulfillment**: A — fully hands-off (Printify auto-sent to production on Stripe paid)
+- **Reviews**: Verified-buyer only
+- **Email**: Gmail SMTP (shopfoundationlabs@gmail.com + App Password)
+- **Shipping address**: collected on our /checkout page before Stripe redirect
+- Skin Labs = "Coming Soon" + email capture (no products yet)
 
 ## Architecture
-- **Frontend**: React 18 (CRA) + Tailwind + React Router v6 + lucide-react icons. Custom design system (Fraunces serif + Outfit sans + JetBrains mono).
-- **Backend**: FastAPI + Motor (MongoDB) + httpx (Printify) + emergentintegrations (Stripe).
-- **Database**: MongoDB — `payment_transactions`, `newsletter` collections.
-- **External APIs**: Printify (live product sync, 4 products) + Stripe Checkout (test mode).
+- **Frontend**: React 18 + Tailwind + React Router v6 + lucide-react.
+- **Backend**: FastAPI + Motor (MongoDB) + httpx (Printify) + emergentintegrations (Stripe) + smtplib (Gmail) + bcrypt + PyJWT.
+- **DB Collections**: `users`, `payment_transactions`, `reviews`, `abandoned_carts`, `login_attempts`, `newsletter`.
 
 ## Core Requirements (Static)
-1. Premium "wow" UX that beats user's current Shopify site
+1. Premium "wow" UX
 2. Live apparel sync from Printify
-3. Stripe Checkout for purchases ($6.99 flat shipping)
-4. Skin Labs "Coming Soon" page with email capture
-5. SEO meta tags for search-engine discoverability
+3. Stripe Checkout + flat $6.99 shipping (server-side priced)
+4. Skin Labs "Coming Soon" page + newsletter
+5. SEO meta tags
 6. Mobile responsive
+7. JWT auth + customer accounts + order history
+8. Verified-buyer-only reviews
+9. Order confirmation emails + abandoned-cart recovery
+10. Auto-create Printify order on Stripe paid webhook
 
-## What's Implemented (Jan 2026)
-- ✅ Full multi-page site: Home, Shop, Product Detail, Cart, Skin Labs, About, Checkout Success, 404
-- ✅ Sticky header with cart drawer + cart-count badge
-- ✅ Printify product sync (4 products live, server-cached 120s)
-- ✅ Variant selector (size chips + color swatches) auto-selects first ENABLED variant
-- ✅ Cart persisted in localStorage; full cart page + slide-out drawer
-- ✅ Stripe Checkout integration with server-side re-pricing (anti-tamper) + $6.99 shipping
-- ✅ Stripe webhook handler with signature verification + idempotent payment_transactions update
-- ✅ Newsletter capture (Skin Labs founding list) — idempotent
-- ✅ Checkout success page polls Stripe status (12 attempts × 2s) and clears cart on paid
-- ✅ Brutalist-editorial design system: Fraunces serif + Outfit + JetBrains mono, cream/sage/stone palette, grain overlay, marquee, fade-up animations
-- ✅ SEO meta tags + OG tags
-- ✅ All interactive elements have `data-testid` attributes
-- ✅ Backend tests: 9/9 pass (pytest at `/app/backend/tests/backend_test.py`)
-- ✅ Frontend critical flows verified by testing agent
+## What's Implemented (Iteration 2 — Jan 2026)
+### Iteration 1 (✅ done)
+- Multi-page site: Home, Shop, Product Detail, Cart, Skin Labs, About, Checkout Success, 404
+- Editorial design system (Fraunces + Outfit + JetBrains Mono, cream/sage/stone, grain, marquee, fade-up)
+- Sticky header + slide-out cart drawer + cart-count badge
+- Printify product sync (4 products, server-cached 120s)
+- Stripe Checkout — server-side re-pricing
+- Newsletter capture
+- SEO meta + OG tags
+- All elements have `data-testid`
 
-## Testing Status
-- Backend: 100% (9/9 tests pass)
-- Frontend critical flows: 100% verified
+### Iteration 2 (✅ done — this session)
+- **JWT auth**: `/api/auth/{register,login,logout,me}` with bcrypt + cookie + Bearer token. Brute-force lockout (5 attempts / 15 min) using `X-Forwarded-For` (works behind k8s ingress).
+- **Frontend auth**: AuthContext, Login + Register pages, /account with order history, User icon in header.
+- **Checkout page** (`/checkout`): Address form (email, name, address1/2, city, region, ZIP, country, phone). Order summary panel. Replaces direct-to-Stripe flow.
+- **Auto-fulfillment**: On Stripe `paid` (via webhook OR status polling), backend creates Printify order with shipping address, then auto-submits to production. Idempotent.
+- **Gmail SMTP**: HTML order confirmation email with brand template. Verified working (real test email sent).
+- **Abandoned-cart recovery**: `/api/cart/track` upserts cart on checkout page; background worker (every 5 min) emails carts ≥ 60 min old once.
+- **Verified-buyer reviews**: `GET /api/products/{id}/reviews` (public), `POST` requires auth AND a paid transaction with the product. One review per user per product (upsert). Reviews section on ProductDetail with star ratings, write form, signin CTA.
+- **Account page**: `GET /api/account/orders` lists paid orders with fulfillment status.
+- **CORS** restricted to FRONTEND_URL + localhost.
+
+### Testing Status
+- iter 2 backend: 26/26 pytest pass
+- iter 2 frontend critical flows: 100% verified
+- All HIGH/CRITICAL issues fixed (brute-force lockout fix verified — 6th attempt → 429)
 
 ## Backlog / Next Steps
 ### P1
-- Skin Labs product launch (when formulations ready) — same architecture, just add products
-- Order fulfillment automation: webhook → create Printify order for paid sessions (currently just records payment)
-- Email transactional flow (order confirmation + shipping updates) via SendGrid/Resend
-- Admin order dashboard
+- Real per-variant shipping rates from Printify (currently $6.99 flat)
+- Order status emails on Printify webhook events (shipped/delivered)
+- Customer-facing tracking number once Printify ships
+- Forgot-password flow (email reset link)
 
 ### P2
-- Real shipping rates from Printify per-variant (currently flat $6.99)
-- Customer accounts + order history
-- Product reviews
-- Sitemap.xml + robots.txt for SEO
+- Search product autocomplete
+- Wishlist / saved items
+- Discount codes
+- Sitemap.xml + robots.txt
 - Google Analytics / Meta Pixel
+- Skin Labs product launch when formulations ready
 
-### Deployment / Hosting Plan
-GitHub Pages alone cannot host the FastAPI backend. Recommended split:
-- **Frontend** → Vercel (free tier) or Netlify, point custom domain at it
-- **Backend** → Emergent deploy (current) or Railway/Render (free tier)
-- **Database** → MongoDB Atlas free tier
-- **Repo** → GitHub via "Save to GitHub" button in Emergent
+### Deployment Plan
+- **Frontend** → Vercel/Netlify (free)
+- **Backend** → Emergent or Railway/Render
+- **DB** → MongoDB Atlas free tier
+- **Repo** → "Save to GitHub" button in this chat
 
-## Notable Files
-- `/app/backend/server.py` — all API logic
-- `/app/frontend/src/pages/*` — page components
-- `/app/frontend/src/context/CartContext.js` — cart state
-- `/app/frontend/src/lib/api.js` — backend client
+## Key Files
+- `/app/backend/server.py` — main + checkout + reviews + account + abandoned cart worker
+- `/app/backend/auth.py` — JWT register/login/me/logout + brute-force lockout
+- `/app/backend/emailer.py` — Gmail SMTP + HTML templates (order confirmation, abandoned cart)
+- `/app/frontend/src/context/AuthContext.js`
+- `/app/frontend/src/pages/{Login,Register,Account,CheckoutPage,...}.js`
+- `/app/frontend/src/components/Reviews.js`
+- `/app/memory/test_credentials.md`
+
+## Notable Env Variables
+- `JWT_SECRET` — HS256 signing key
+- `GMAIL_USER` / `GMAIL_APP_PASSWORD` — Gmail SMTP
+- `PRINTIFY_AUTO_FULFILL=true` — auto-send to Printify production
+- `ABANDONED_CART_DELAY_MIN=60` — minutes before abandoned-cart email
+- `FRONTEND_URL` — for CORS + email CTAs

@@ -121,13 +121,21 @@ async def register(payload: RegisterIn, request: Request, response: Response):
 async def login(payload: LoginIn, request: Request, response: Response):
     db = request.app.state.db
     email = payload.email.lower().strip()
-    ident = f"{request.client.host if request.client else 'x'}:{email}"
+    # behind ingress proxy, request.client.host is the upstream pod IP (varies);
+    # use the original client IP from X-Forwarded-For for stable rate-limiting.
+    xff = request.headers.get("x-forwarded-for") or ""
+    client_ip = (xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown"))
+    ident = f"{client_ip}:{email}"
     # brute force lockout
     attempt = await db.login_attempts.find_one({"identifier": ident})
     if attempt and attempt.get("count", 0) >= 5:
         locked_until = attempt.get("locked_until")
-        if locked_until and locked_until > datetime.now(timezone.utc):
-            raise HTTPException(429, "Too many failed attempts. Try again later.")
+        if locked_until:
+            # Mongo strips tzinfo on retrieval — restore to UTC for safe compare
+            if locked_until.tzinfo is None:
+                locked_until = locked_until.replace(tzinfo=timezone.utc)
+            if locked_until > datetime.now(timezone.utc):
+                raise HTTPException(429, "Too many failed attempts. Try again later.")
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(payload.password, user["password_hash"]):
         await db.login_attempts.update_one(
