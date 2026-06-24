@@ -36,14 +36,11 @@ from auth import router as auth_router, get_current_user, get_optional_user
 from emailer import send_order_confirmation, send_abandoned_cart
 
 # ---------- Config ----------
-MONGO_URL = os.environ["MONGO_URL"]
-DB_NAME = os.environ["DB_NAME"]
-PRINTIFY_API_TOKEN = os.environ["PRINTIFY_API_TOKEN"]
-PRINTIFY_SHOP_ID = os.environ["PRINTIFY_SHOP_ID"]
-STRIPE_API_KEY = os.environ["STRIPE_API_KEY"]
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
-PRINTIFY_AUTO_FULFILL = os.environ.get("PRINTIFY_AUTO_FULFILL", "true").lower() == "true"
-ABANDONED_CART_DELAY_MIN = int(os.environ.get("ABANDONED_CART_DELAY_MIN", "60"))
+MONGO_URL = os.environ.get("MONGO_URL", "")
+DB_NAME = os.environ.get("DB_NAME", "foundation")
+PRINTIFY_API_TOKEN = os.environ.get("PRINTIFY_API_TOKEN", "")
+PRINTIFY_SHOP_ID = os.environ.get("PRINTIFY_SHOP_ID", "")
+STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 
 PRINTIFY_BASE = "https://api.printify.com/v1"
 SHIPPING_FLAT = 6.99
