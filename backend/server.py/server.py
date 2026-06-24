@@ -26,6 +26,9 @@ from bson import ObjectId
 
 load_dotenv()
 
+logger = logging.getLogger("foundation")
+logging.basicConfig(level=logging.INFO)
+
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout,
     CheckoutSessionRequest,
@@ -41,12 +44,17 @@ DB_NAME = os.environ.get("DB_NAME", "foundation")
 PRINTIFY_API_TOKEN = os.environ.get("PRINTIFY_API_TOKEN", "")
 PRINTIFY_SHOP_ID = os.environ.get("PRINTIFY_SHOP_ID", "")
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
+PRINTIFY_AUTO_FULFILL = os.environ.get("PRINTIFY_AUTO_FULFILL", "true").lower() == "true"
+ABANDONED_CART_DELAY_MIN = int(os.environ.get("ABANDONED_CART_DELAY_MIN", "60"))
+
+_REQUIRED = ["MONGO_URL", "DB_NAME", "PRINTIFY_API_TOKEN", "PRINTIFY_SHOP_ID", "STRIPE_API_KEY", "JWT_SECRET"]
+_MISSING = [k for k in _REQUIRED if not os.environ.get(k)]
+if _MISSING:
+    logger.warning(f"STARTUP WARNING — missing env vars: {_MISSING}")
 
 PRINTIFY_BASE = "https://api.printify.com/v1"
 SHIPPING_FLAT = 6.99
-
-logger = logging.getLogger("foundation")
-logging.basicConfig(level=logging.INFO)
 
 # ---------- DB ----------
 mongo_client = AsyncIOMotorClient(MONGO_URL)
@@ -75,7 +83,8 @@ _CACHE_TTL = 120
 
 
 def _clean_html(html: str) -> str:
-    if not html: return ""
+    if not html:
+        return ""
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
 
 
@@ -86,9 +95,12 @@ def _slugify(s: str) -> str:
 def _transform_product(p: Dict[str, Any]) -> Dict[str, Any]:
     variants = []
     for v in p.get("variants", []):
-        if not v.get("is_available", True): continue
+        if not v.get("is_available", True):
+            continue
         variants.append({
-            "id": v["id"], "title": v.get("title"), "sku": v.get("sku"),
+            "id": v["id"],
+            "title": v.get("title"),
+            "sku": v.get("sku"),
             "price": round(v.get("price", 0) / 100, 2),
             "is_enabled": v.get("is_enabled", False),
             "is_available": v.get("is_available", True),
@@ -97,20 +109,29 @@ def _transform_product(p: Dict[str, Any]) -> Dict[str, Any]:
     enabled = [v for v in variants if v["is_enabled"]] or variants
     prices = [v["price"] for v in enabled] or [0]
     options = [{
-        "name": o.get("name"), "type": o.get("type"),
+        "name": o.get("name"),
+        "type": o.get("type"),
         "values": [{"id": v.get("id"), "title": v.get("title"), "colors": v.get("colors")} for v in o.get("values", [])],
     } for o in p.get("options", [])]
     images = [{
-        "src": i.get("src"), "variant_ids": i.get("variant_ids", []),
-        "position": i.get("position"), "is_default": i.get("is_default", False),
+        "src": i.get("src"),
+        "variant_ids": i.get("variant_ids", []),
+        "position": i.get("position"),
+        "is_default": i.get("is_default", False),
     } for i in p.get("images", [])]
     images.sort(key=lambda x: (not x["is_default"], x.get("position") != "front"))
     return {
-        "id": p["id"], "slug": _slugify(p.get("title", "")),
-        "title": p.get("title"), "description": _clean_html(p.get("description", "")),
-        "tags": p.get("tags", []), "visible": p.get("visible", True),
-        "price_min": min(prices), "price_max": max(prices),
-        "images": images, "variants": enabled, "options": options,
+        "id": p["id"],
+        "slug": _slugify(p.get("title", "")),
+        "title": p.get("title"),
+        "description": _clean_html(p.get("description", "")),
+        "tags": p.get("tags", []),
+        "visible": p.get("visible", True),
+        "price_min": min(prices),
+        "price_max": max(prices),
+        "images": images,
+        "variants": enabled,
+        "options": options,
     }
 
 
@@ -183,7 +204,6 @@ async def create_printify_order(transaction: Dict[str, Any]) -> Optional[str]:
                 return None
             order = r.json()
             order_id = order.get("id")
-            # Auto-send to production
             if PRINTIFY_AUTO_FULFILL and order_id:
                 rp = await client.post(
                     f"{PRINTIFY_BASE}/shops/{PRINTIFY_SHOP_ID}/orders/{order_id}/send_to_production.json",
@@ -213,9 +233,9 @@ class ShippingAddress(BaseModel):
     address1: str = Field(min_length=1, max_length=120)
     address2: Optional[str] = Field(default="", max_length=120)
     city: str = Field(min_length=1, max_length=80)
-    region: str = Field(min_length=1, max_length=60)  # state/province
+    region: str = Field(min_length=1, max_length=60)
     zip: str = Field(min_length=2, max_length=20)
-    country: str = Field(min_length=2, max_length=3)   # ISO alpha-2
+    country: str = Field(min_length=2, max_length=3)
     phone: Optional[str] = Field(default="", max_length=30)
 
 
@@ -282,9 +302,11 @@ async def get_product(product_id: str):
 async def get_reviews(product_id: str):
     cursor = db.reviews.find({"product_id": product_id}).sort("created_at", -1).limit(50)
     out = []
-    rating_sum = 0; count = 0
+    rating_sum = 0
+    count = 0
     async for r in cursor:
-        rating_sum += r["rating"]; count += 1
+        rating_sum += r["rating"]
+        count += 1
         out.append({
             "id": str(r["_id"]),
             "user_name": r.get("user_name", "Customer"),
@@ -299,7 +321,6 @@ async def get_reviews(product_id: str):
 
 @api.post("/products/{product_id}/reviews")
 async def post_review(product_id: str, payload: ReviewIn, user: dict = Depends(get_current_user)):
-    # verified buyer = has a paid transaction containing this product
     paid_with_product = await db.payment_transactions.find_one({
         "email": user["email"],
         "payment_status": "paid",
@@ -307,7 +328,6 @@ async def post_review(product_id: str, payload: ReviewIn, user: dict = Depends(g
     })
     if not paid_with_product:
         raise HTTPException(403, "Only verified buyers can leave a review. Purchase this product first.")
-    # one review per user per product
     existing = await db.reviews.find_one({"product_id": product_id, "user_id": user["id"]})
     doc = {
         "product_id": product_id,
@@ -399,7 +419,6 @@ async def create_checkout_session(
         "email_sent": False,
     }
     await db.payment_transactions.insert_one(tx_doc)
-    # Mark any active abandoned-cart row for this email as "checked-out" so we don't email it
     await db.abandoned_carts.update_many(
         {"email": payload.email, "status": "active"},
         {"$set": {"status": "checked_out", "updated_at": datetime.now(timezone.utc)}},
@@ -414,7 +433,6 @@ async def _maybe_fulfill(session_id: str):
         return
     if tx.get("payment_status") != "paid":
         return
-    # Fulfillment
     if not tx.get("printify_order_id"):
         order_id = await create_printify_order(tx)
         if order_id:
@@ -424,7 +442,6 @@ async def _maybe_fulfill(session_id: str):
                           "updated_at": datetime.now(timezone.utc).isoformat()}},
             )
             tx["printify_order_id"] = order_id
-    # Email
     if not tx.get("email_sent"):
         ok = send_order_confirmation({
             **tx, "order_id": (tx.get("printify_order_id") or tx["session_id"][-10:].upper()),
@@ -487,7 +504,6 @@ async def stripe_webhook(request: Request, background: BackgroundTasks):
     return {"received": True}
 
 
-# ---- Newsletter ----
 @api.post("/newsletter")
 async def newsletter_signup(payload: NewsletterRequest):
     existing = await db.newsletter.find_one({"email": payload.email})
@@ -500,10 +516,8 @@ async def newsletter_signup(payload: NewsletterRequest):
     return {"ok": True}
 
 
-# ---- Abandoned cart ----
 @api.post("/cart/track")
 async def track_cart(payload: TrackCartIn):
-    """Called when user enters email on checkout page but hasn't paid yet."""
     await db.abandoned_carts.update_one(
         {"email": payload.email, "status": "active"},
         {"$set": {
@@ -518,8 +532,7 @@ async def track_cart(payload: TrackCartIn):
 
 
 async def abandoned_cart_worker():
-    """Background loop: send abandoned-cart email after delay."""
-    await asyncio.sleep(15)  # warmup
+    await asyncio.sleep(15)
     while True:
         try:
             cutoff = datetime.now(timezone.utc) - timedelta(minutes=ABANDONED_CART_DELAY_MIN)
@@ -541,10 +554,9 @@ async def abandoned_cart_worker():
                 logger.info(f"Abandoned cart email -> {cart['email']} ok={ok}")
         except Exception as e:
             logger.exception(f"abandoned_cart_worker error: {e}")
-        await asyncio.sleep(300)  # every 5 min
+        await asyncio.sleep(300)
 
 
-# ---- Account ----
 @api.get("/account/orders")
 async def my_orders(user: dict = Depends(get_current_user)):
     cursor = db.payment_transactions.find({
@@ -566,12 +578,10 @@ async def my_orders(user: dict = Depends(get_current_user)):
     return {"orders": out}
 
 
-# ---------- Mount ----------
 app.include_router(auth_router)
 app.include_router(api)
 
 
-# ---------- Startup ----------
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
@@ -586,4 +596,13 @@ async def startup():
 
 @app.get("/")
 async def health():
-    return {"app": "Foundation Labs", "ok": True}
+    missing = [k for k in _REQUIRED if not os.environ.get(k)]
+    return {"app": "Foundation Labs", "ok": len(missing) == 0, "missing_env": missing}
+
+
+@app.get("/debug/env")
+async def debug_env():
+    return {
+        k: ("✅ set" if os.environ.get(k) else "❌ MISSING")
+        for k in _REQUIRED + ["GMAIL_USER", "GMAIL_APP_PASSWORD", "FRONTEND_URL"]
+    }
