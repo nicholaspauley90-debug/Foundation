@@ -12,7 +12,7 @@
   },
   "scripts": {
     "start": "DISABLE_ESLINT_PLUGIN=true react-scripts start",
-    "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
+    "build": "npm install --include=dev && DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "test": "react-scripts test"
   },
   "eslintConfig": {
